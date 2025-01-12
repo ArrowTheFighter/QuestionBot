@@ -1,2 +1,5 @@
 
 .env
+src/files/config.txt
+src/files/keyData.txt
+src/files/usedKeyData.txt
