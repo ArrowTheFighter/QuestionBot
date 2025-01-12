@@ -18,7 +18,7 @@ client.on(Events.ClientReady, (x) => {
 
     console.log(`${x.user.tag} is ready`);
 
-    client.user.setActivity("We are live!");
+    client.user.setActivity("Key Giveaway!");
 
     const ping = new SlashCommandBuilder()
     .setName('get')
