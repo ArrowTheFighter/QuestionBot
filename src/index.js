@@ -227,7 +227,7 @@ client.on('interactionCreate', async (interaction) =>{
                             interaction.reply(`The used key list is empty. User's will be added here when using the \`/get key\` command.`)
                             return
                         }
-                        interaction.reply(`Here are the unused keys in the list: \n${niceString}`)
+                        interaction.reply(`Here are the used keys in the list: \n${niceString}`)
                     break;
                     case "clear_usedkeys":
                         var confirmString = interaction.options.getString("confirm")
@@ -287,6 +287,7 @@ client.on('interactionCreate', async (interaction) =>{
                             case "generalRole":
                                 interaction.reply(`Setting the \`General Usage Role\` to \`${role.name}\``)
                                 setConfigSetting("generalRole",role.id)
+                                return
                             break;
                         }
                         interaction.reply(`Setting  \`${role.name}\``)
