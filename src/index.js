@@ -56,6 +56,28 @@ client.on(Events.ClientReady, (x) => {
     )
     .addSubcommand(subcommand => 
         subcommand
+        .setName("check_user")
+        .setDescription("Check if a user has a key")
+        .addUserOption(option =>
+            option
+            .setName("user")
+            .setDescription("Check to see if a user has a key")
+            .setRequired(true)
+        )
+    )
+    .addSubcommand(subcommand => 
+        subcommand
+        .setName("remove_user")
+        .setDescription("Removes a user from the used key list")
+        .addUserOption(option =>
+            option
+            .setName("user")
+            .setDescription("The user to remove")
+            .setRequired(true)
+        )
+    )
+    .addSubcommand(subcommand => 
+        subcommand
         .setName("clear_usedkeys")
         .setDescription("Clears all the used keys")
         .addStringOption(option => 
@@ -124,7 +146,8 @@ client.on(Events.ClientReady, (x) => {
             option
             .setName("config_option")
             .setDescription("The config option to adjust")
-            .setChoices([{name: `log channel ID`, value: `logChannel`}])
+            .setChoices([{name: `log channel ID`, value: `logChannel`},
+                {name: `set reply ephemeral`, value: `getkey_ephemeral`}])
             .setRequired(true)
         )
         .addStringOption(option =>
@@ -228,6 +251,32 @@ client.on('interactionCreate', async (interaction) =>{
                             return
                         }
                         interaction.reply(`Here are the used keys in the list: \n${niceString}`)
+                    break;
+                    case "check_user":
+                        var user = interaction.options.getUser("user")
+                        var userKey = getUsersKey(user)
+                        if(userKey == null)
+                        {
+                            interaction.reply(`${user} has not recieved a key.`)
+                            return
+                        }
+                        interaction.reply(`${user} has recieved a key. Their key is \`${userKey}\``)
+                        return
+                    break;
+                    case "remove_user":
+                        var user = interaction.options.getUser("user")
+                        var userKey = getUsersKey(user)
+                        if(userKey == null)
+                        {
+                            interaction.reply(`${user} has not recieved a key.`)
+                            return
+                        }
+                        if(!removeKeyFromUsedKeys(user))
+                        {
+                            interaction.reply("Something went very wrong. Please contact support")
+                            return
+                        }
+                        interaction.reply(`${user} has been removed from the key list. Their key was \`${userKey}\``)
                     break;
                     case "clear_usedkeys":
                         var confirmString = interaction.options.getString("confirm")
@@ -359,7 +408,7 @@ client.on('interactionCreate', async (interaction) =>{
     // }
 })
 
-client.login(process.env.TOKEN);
+client.login(process.env.NEWTOKEN);
 
 
 function WriteKeyData(keydata)
@@ -673,6 +722,30 @@ function getLogChannel(guild)
         return null
     }
     return channel
+}
+
+function getUsersKey(user)
+{
+    const usedKeyData = GetUsedKeyData()
+    if(usedKeyData[user.id] == null)
+    {
+        return null
+    }
+    return usedKeyData[user.id]
+}
+
+function removeKeyFromUsedKeys(user)
+{
+    const usedKeyData = GetUsedKeyData()
+    if(usedKeyData[user.id] == null)
+    {
+        console.log("Somehow the key was not in the used key list, this is not normally possible.")
+        return false
+    }
+    var newKeyData = usedKeyData
+    delete usedKeyData[user.id]
+    WriteUsedKeyData(newKeyData)
+    return true
 }
 
 function writeConfigData(configData)
