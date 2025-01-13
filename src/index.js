@@ -225,8 +225,8 @@ client.on('interactionCreate', async (interaction) =>{
                     interaction.reply({content: "You do not have permission to use this command", ephemeral: true})
                     return
                 }
-                const KeyData = GetKeyData()
-                const UsedKeys = GetUsedKeyData();
+                //const KeyData =  await GetKeyData()
+                //const UsedKeys =  await GetUsedKeyData();
                 switch(interaction.options.getSubcommand())
                 {
                     case "add":
@@ -235,7 +235,7 @@ client.on('interactionCreate', async (interaction) =>{
                         AddKeysToKeyData(newkeys)
                     break;
                     case "list_unused":
-                        const keys = GetKeysAsNiceString()
+                        const keys = await GetKeysAsNiceString()
                         if(keys == "")
                         {
                             interaction.reply(`The key list is empty. Use the \`/keys add\` command to add more keys.`)
@@ -421,7 +421,7 @@ function WriteUsedKeyData(keydata)
     fs.writeFileSync(`src/files/usedKeyData.txt`, JSON.stringify(keydata));
 }
 
-function GetUsedKeyData()
+async function GetUsedKeyData()
 {
     if(!fs.existsSync(`src/files/usedKeyData.txt`))
         {
@@ -458,7 +458,7 @@ async function GetUsedKeysAsNiceString(client)
     return niceString
 }
 
-function GetKeysAsNiceString()
+async function GetKeysAsNiceString()
 {
     const KeyData = GetKeyData()
     var newString = ""
@@ -474,7 +474,7 @@ function GetKeysAsNiceString()
     return newString
 }
 
-function GetKeyData()
+async function GetKeyData()
 {
     if(!fs.existsSync(`src/files/keyData.txt`))
     {
