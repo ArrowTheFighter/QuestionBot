@@ -678,7 +678,7 @@ async function getDMMessage(user,key)
     const userKeyWOSpace = key.replace(/\s/g, '')
     if(configData.dm_message == null)
     {
-        return `You ran the "get key" command!\nHere is your key: \`${userKeyWOSpace}\``
+        return `Here is your requested key:\n\`${userKeyWOSpace}\``
     }
 
     const DMMessage = configData.dm_message
