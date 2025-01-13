@@ -414,16 +414,27 @@ client.login(process.env.NEWTOKEN);
 
 function WriteKeyData(keydata)
 {
+    checkForFilesDir()
     fs.writeFileSync(`src/files/keyData.txt`, JSON.stringify(keydata));
 }
 
 function WriteUsedKeyData(keydata)
 {
+    checkForFilesDir()
     fs.writeFileSync(`src/files/usedKeyData.txt`, JSON.stringify(keydata));
+}
+
+function checkForFilesDir()
+{
+    if(!fs.existsSync(`src/files`))
+    {
+        fs.mkdirSync(`src/files`)
+    }
 }
 
 async function GetUsedKeyData()
 {
+    checkForFilesDir()
     if(!fs.existsSync(`src/files/usedKeyData.txt`))
         {
             console.log("Couldnt find usedKeyData file. Creating new file.")
@@ -475,6 +486,7 @@ async function GetKeysAsNiceString()
 
 async function GetKeyData()
 {
+    checkForFilesDir()
     if(!fs.existsSync(`src/files/keyData.txt`))
     {
         console.log("Couldnt find keyData file. Creating new file.")
@@ -746,5 +758,6 @@ async function removeKeyFromUsedKeys(user)
 
 function writeConfigData(configData)
 {
+    checkForFilesDir()
     fs.writeFileSync(`src/files/config.txt`,JSON.stringify(configData))
 }
