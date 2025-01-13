@@ -483,9 +483,7 @@ function GetKeyData()
         newKeyData.unusedKeys = []
         var JsonData = JSON.stringify(newKeyData)
         fs.writeFileSync(`src/files/keyData.txt`, JsonData);
-        const keyDataFile = fs.readFileSync(`src/files/keyData.txt`,'utf8')
-        var KeyDataParsed = JSON.parse(keyDataFile)
-        return KeyDataParsed;
+        return newKeyData;
     }
     const keyDataFile = fs.readFileSync(`src/files/keyData.txt`,'utf8')
 
