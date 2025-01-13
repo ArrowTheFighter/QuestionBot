@@ -429,9 +429,7 @@ async function GetUsedKeyData()
             var newKeyData = {}
             var JsonData = JSON.stringify(newKeyData)
             fs.writeFileSync(`src/files/usedKeyData.txt`, JsonData);
-            const keyDataFile = fs.readFileSync(`src/files/usedKeyData.txt`,'utf8')
-            var KeyDataParsed = JSON.parse(keyDataFile)
-            return KeyDataParsed;
+            return newKeyData;
         }
         const keyDataFile = fs.readFileSync(`src/files/usedKeyData.txt`,'utf8')
     
