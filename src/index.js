@@ -155,6 +155,15 @@ client.on(Events.ClientReady, (x) => {
             .setName("config_value")
             .setDescription("The value to set.")
         )
+    ).addSubcommand(subcommand =>
+        subcommand
+        .setName("clear")
+        .setDescription("clear the entire config file")
+        .addStringOption(option =>
+            option
+            .setName("confirm")
+            .setDescription("Confirm clearing the entire config file")
+        )
     )
     client.application.commands.create(config);
     
@@ -188,12 +197,7 @@ client.on('interactionCreate', async (interaction) =>{
                             interaction.reply({content: 'You do not have permission to use this command',ephemeral : true})
                             if(await !checkIfGeneralRoleExists())
                             {
-                                const logChannel = getLogChannel(interaction.guild)
-                                if(logChannel != "")
-                                {
-                                    logChannel.send(`There is no \`general role\` set.\n Please use \`config set_roles "general usage"\` to set this role.`)
-                                }
-                               
+                                await TryAndSendLogMessage(interaction.guild, `There is no \`general role\` set.\n Please use \`config set_roles "general usage"\` to set this role.`)
                             }
                             return
                         }
@@ -203,7 +207,12 @@ client.on('interactionCreate', async (interaction) =>{
                         if(userKey == null)
                         {
                             interaction.reply('Woops! Looks like the key list is empty. Please contact support.')
+                            await TryAndSendLogMessage(interaction.guild,`**Notice!** There are no keys in the keylist.`)
                             return
+                        }
+                        if(KeyData.unusedKeys.length <= 3)
+                        {
+                            await TryAndSendLogMessage(interaction.guild,`The key list has only **${KeyData.unusedKeys.length}** keys left.`)
                         }
                         const user = interaction.user
                         const replyMessage = await GetKeyReply(user,userKey)
@@ -390,6 +399,19 @@ client.on('interactionCreate', async (interaction) =>{
                         await setConfigSetting(stringOptionMessage,stringValue)
                         interaction.reply(`Setting the \`${stringOptionMessage}\` to \`${stringValue}\``)
                     break;
+
+                    case "clear":
+                        var confirmString = interaction.options.getString("confirm")
+                        if(confirmString != "confirm")
+                        {
+                            interaction.reply({content: `You need to type \`confirm\` to run this command.\nInsure you understand what you are doing before using this command.`, ephemeral: true})
+                        }else
+                        {
+                            await ClearConfig()
+                            interaction.reply({content: `Clearing the config file`, ephemeral: false})
+                        }
+                        return
+                    break;
                 }
             break;
         }
@@ -474,7 +496,6 @@ async function GetKeysAsNiceString()
     var newString = ""
     if(KeyData.unusedKeys.length <= 0)
     {
-        console.log("No unused keys")
         return ""
     }
     for (let index = 0; index < KeyData.unusedKeys.length; index++) {
@@ -518,6 +539,12 @@ async function ClearUsedKeysList()
     var newKeyData = usedKeyData
     newKeyData = {}
     WriteUsedKeyData(newKeyData)
+}
+
+async function ClearConfig()
+{
+    const newConfig = {}
+    writeConfigData(newConfig)
 }
 
 async function AddKeysToKeyData(keys)
@@ -573,7 +600,6 @@ async function CheckIfUserHasKey(user)
     const UsedKeys = await GetUsedKeyData()
     if(UsedKeys.hasOwnProperty(user.id))
     {
-        console.log(`User already has key. their key is ${UsedKeys[user.id]}`)
         return UsedKeys[user.id]
     }
     return null;
@@ -660,7 +686,7 @@ async function getConfigData()
 {
     if(!fs.existsSync(`src/files/config.txt`))
     {
-        console.log("Couldnt find defaults file. Adding new config file")
+        console.log("Couldnt find config file. Adding new config file")
         const configData = {}
         writeConfigData(configData)
         return configData;
@@ -716,12 +742,13 @@ async function GetKeyReplyEphemeral()
     return configData.getkey_ephemeral
 }
 
-function getLogChannel(guild)
+async function getLogChannel(guild)
 {
-    const configData = getConfigData()
+    const configData = await getConfigData()
     if(configData.logChannel == null)
     {
-        return ""
+        console.log("no log channel set")
+        return null
     }
     const channel = guild.channels.cache.get(configData.logChannel)
     if(channel == null)
@@ -754,6 +781,18 @@ async function removeKeyFromUsedKeys(user)
     delete usedKeyData[user.id]
     WriteUsedKeyData(newKeyData)
     return true
+}
+
+async function TryAndSendLogMessage(guild,message)
+{
+    const channel = await getLogChannel(guild)
+    if(channel == null)
+    {
+        return false
+    }
+    channel.send(message)
+    return true
+
 }
 
 function writeConfigData(configData)
