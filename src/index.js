@@ -147,7 +147,9 @@ client.on(Events.ClientReady, (x) => {
             .setName("config_option")
             .setDescription("The config option to adjust")
             .setChoices([{name: `log channel ID`, value: `logChannel`},
-                {name: `set reply ephemeral`, value: `getkey_ephemeral`}])
+                {name: `set reply ephemeral`, value: `getkey_ephemeral`},
+                {name: `set remaining keys log message`, value: `remainingKeysMsg`},
+                {name: `set remaining keys log amount`, value: `remainingKeysAmount`}])
             .setRequired(true)
         )
         .addStringOption(option =>
@@ -204,15 +206,23 @@ client.on('interactionCreate', async (interaction) =>{
                         //Give the member the key
                         const KeyData = await GetKeyData()
                         const userKey = await GetNextKeyAndRemove(interaction.user)
+                        const ConfigData = await getConfigData()
+                        var remainingKA = 3
+                        if(ConfigData.remainingKeysAmount != null)
+                        {
+                            remainingKA = Number(ConfigData.remainingKeysAmount)
+                            
+                        }
                         if(userKey == null)
                         {
                             interaction.reply('Woops! Looks like the key list is empty. Please contact support.')
                             await TryAndSendLogMessage(interaction.guild,`**Notice!** There are no keys in the keylist.`)
                             return
                         }
-                        if(KeyData.unusedKeys.length <= 3)
+                        console.log(KeyData.unusedKeys.length + " - " + remainingKA)
+                        if(KeyData.unusedKeys.length <= remainingKA + 1)
                         {
-                            await TryAndSendLogMessage(interaction.guild,`The key list has only **${KeyData.unusedKeys.length}** keys left.`)
+                            await TryAndSendLogMessage(interaction.guild,await GetRemainingKeysMsg())
                         }
                         const user = interaction.user
                         const replyMessage = await GetKeyReply(user,userKey)
@@ -732,6 +742,27 @@ async function GetKeyReply(user,key)
     return AdjustedMessage
 }
 
+async function GetRemainingKeysMsg()
+{
+    const configData = await getConfigData()
+    const KeyData = await GetKeyData()
+
+    var keyString = `**${KeyData.unusedKeys.length}** keys`
+    if(KeyData.unusedKeys.length == 1)
+    keyString = `**${KeyData.unusedKeys.length}** key`
+
+    if(configData.remainingKeysMsg == null)
+    {
+        return `The key list has only ${keyString} left.`
+    }
+
+    const ReplyMessage = configData.remainingKeysMsg
+    var AdjustedMessage = ReplyMessage
+    AdjustedMessage = AdjustedMessage.replace(/{KEY}/g,`${keyString}`)
+    AdjustedMessage = AdjustedMessage.replace(/\\n/g,"\n")
+    return AdjustedMessage
+}
+
 async function GetKeyReplyEphemeral()
 {
     const configData = await getConfigData()
@@ -790,6 +821,7 @@ async function TryAndSendLogMessage(guild,message)
     {
         return false
     }
+    if(message == null) return false
     channel.send(message)
     return true
 
