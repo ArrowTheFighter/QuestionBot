@@ -3,11 +3,12 @@ const fs = require('fs');
 const {Client, REST ,Events, Partials, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder, PermissionsBitField, Permissions,ButtonBuilder, ButtonStyle, ActionRowBuilder, TextChannel} = require('discord.js');
 const { Routes } = require('discord-api-types/v9');
 const { memoryUsage } = require('process');
+const internal = require('stream');
 const client = new Client({intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent,GatewayIntentBits.GuildVoiceStates,GatewayIntentBits.GuildMessageReactions,GatewayIntentBits.GuildMembers], partials: [Partials.Message, Partials.Channel, Partials.Reaction]});
 
 const rest = new REST({ version: '9'}).setToken(process.env.TOKEN)
 
-const USERPATH = 'src/files/users/'
+const FILESPATH = 'src/files'
 
 //Delete commands
 // rest.delete(Routes.applicationCommand('1286948398234341436', "1287132867180101652"))
@@ -187,26 +188,26 @@ client.on('interactionCreate', async (interaction) =>{
                             return
                         }
                         //Check if the user has already been given a key
-                        const userPreviousKey = await CheckIfUserHasKey(interaction.user)
+                        const userPreviousKey = CheckIfUserHasKey(interaction.guild, interaction.user)
                         if(userPreviousKey != null)
                         {
                             interaction.reply({content: `You have already been given a key. Your key is \`${userPreviousKey}\``,ephemeral : true})
                             return
                         }
                         //Check if the user has the required role to use this command
-                        if(await !checkForGeneralRole(interaction.member))
+                        if(!checkForGeneralRole(interaction.guild, interaction.member))
                         {
                             interaction.reply({content: 'You do not have permission to use this command',ephemeral : true})
-                            if(await !checkIfGeneralRoleExists())
+                            if(!checkIfGeneralRoleExists(interaction.guild))
                             {
-                                await TryAndSendLogMessage(interaction.guild, `There is no \`general role\` set.\n Please use \`config set_roles "general usage"\` to set this role.`)
+                                TryAndSendLogMessage(interaction.guild, `There is no \`general role\` set.\n Please use \`config set_roles "general usage"\` to set this role.`)
                             }
                             return
                         }
                         //Give the member the key
-                        const KeyData = await GetKeyData()
-                        const userKey = await GetNextKeyAndRemove(interaction.user)
-                        const ConfigData = await getConfigData()
+                        const KeyData = GetKeyData(interaction.guild)
+                        const userKey = GetNextKeyAndRemove(interaction.guild,interaction.user)
+                        const ConfigData = getConfigData(interaction.guild)
                         var remainingKA = 3
                         if(ConfigData.remainingKeysAmount != null)
                         {
@@ -216,18 +217,18 @@ client.on('interactionCreate', async (interaction) =>{
                         if(userKey == null)
                         {
                             interaction.reply('Woops! Looks like the key list is empty. Please contact support.')
-                            await TryAndSendLogMessage(interaction.guild,`**Notice!** There are no keys in the keylist.`)
+                            TryAndSendLogMessage(interaction.guild,`**Notice!** There are no keys in the keylist.`)
                             return
                         }
                         console.log(KeyData.unusedKeys.length + " - " + remainingKA)
                         if(KeyData.unusedKeys.length <= remainingKA + 1)
                         {
-                            await TryAndSendLogMessage(interaction.guild,await GetRemainingKeysMsg())
+                            TryAndSendLogMessage(interaction.guild,GetRemainingKeysMsg(interaction.guild))
                         }
                         const user = interaction.user
-                        const replyMessage = await GetKeyReply(user,userKey)
-                        const DMMessage = await getDMMessage(user,userKey)
-                        const isEphemeral = await GetKeyReplyEphemeral()
+                        const replyMessage = GetKeyReply(interaction.guild, user,userKey)
+                        const DMMessage = getDMMessage(interaction.guild, user,userKey)
+                        const isEphemeral = GetKeyReplyEphemeral(interaction.guild)
                         interaction.reply({content : replyMessage, ephemeral : isEphemeral})
                         user.send(DMMessage)
                     break;
@@ -240,22 +241,20 @@ client.on('interactionCreate', async (interaction) =>{
                     interaction.reply({content: "This command cannot be used here. Please contact support if this is an error.", ephemeral: true})
                     return
                 }
-                if(await !checkForManagerRole(interaction.member))
+                if(!checkForManagerRole(interaction.guild,interaction.member))
                 {
                     interaction.reply({content: "You do not have permission to use this command", ephemeral: true})
                     return
                 }
-                //const KeyData =  await GetKeyData()
-                //const UsedKeys =  await GetUsedKeyData();
                 switch(interaction.options.getSubcommand())
                 {
                     case "add":
                         const newkeys = interaction.options.getString('newkeys')
                         interaction.reply(`Adding the following keys: \`${newkeys}\``)
-                        await AddKeysToKeyData(newkeys)
+                        AddKeysToKeyData(interaction.guild, newkeys)
                     break;
                     case "list_unused":
-                        const keys = await GetKeysAsNiceString()
+                        const keys = GetKeysAsNiceString(interaction.guild)
                         if(keys == "")
                         {
                             interaction.reply(`The key list is empty. Use the \`/keys add\` command to add more keys.`)
@@ -264,7 +263,7 @@ client.on('interactionCreate', async (interaction) =>{
                         interaction.reply(`Here are the unused keys in the list: ${keys}`)
                     break;
                     case 'list_used':
-                        const niceString = await GetUsedKeysAsNiceString(client)
+                        const niceString = await GetUsedKeysAsNiceString(interaction.guild,client)
                         if(niceString == "")
                         {
                             interaction.reply(`The used key list is empty. User's will be added here when using the \`/get key\` command.`)
@@ -274,7 +273,7 @@ client.on('interactionCreate', async (interaction) =>{
                     break;
                     case "check_user":
                         var user = interaction.options.getUser("user")
-                        var userKey = await getUsersKey(user)
+                        var userKey = getUsersKey(interaction.guild, user)
                         if(userKey == null)
                         {
                             interaction.reply(`${user} has not recieved a key.`)
@@ -285,13 +284,13 @@ client.on('interactionCreate', async (interaction) =>{
                     break;
                     case "remove_user":
                         var user = interaction.options.getUser("user")
-                        var userKey = await getUsersKey(user)
+                        var userKey = getUsersKey(interaction.guild, user)
                         if(userKey == null)
                         {
                             interaction.reply(`${user} has not recieved a key.`)
                             return
                         }
-                        if(await !removeKeyFromUsedKeys(user))
+                        if(!removeKeyFromUsedKeys(interaction.guild, user))
                         {
                             interaction.reply("Something went very wrong. Please contact support")
                             return
@@ -305,7 +304,7 @@ client.on('interactionCreate', async (interaction) =>{
                             interaction.reply({content: `You need to type \`confirm\` to run this command.\nInsure you understand what you are doing before using this command.`, ephemeral: true})
                         }else
                         {
-                            await ClearUsedKeysList()
+                            ClearUsedKeysList(interaction.guild)
                             interaction.reply({content: `Clearing the used keys list.`, ephemeral: false})
                         }
                         return
@@ -317,7 +316,7 @@ client.on('interactionCreate', async (interaction) =>{
                             interaction.reply({content: `You need to type \`confirm\` to run this command.\nInsure you understand what you are doing before using this command.`, ephemeral: true})
                         }else
                         {
-                            await ClearKeyList()
+                            ClearKeyList(interaction.guild)
                             interaction.reply({content: `Clearing the unused keys list.`, ephemeral: false})
                         }
                         return
@@ -331,7 +330,7 @@ client.on('interactionCreate', async (interaction) =>{
                     interaction.reply({content: "This command cannot be used here. Please contact support if this is an error.", ephemeral: true})
                     return
                 }
-                if(await !checkForManagerRole(interaction.member))
+                if(!checkForManagerRole(interaction.guild, interaction.member))
                 {
                     interaction.reply({content: "You do not have permission to use this command", ephemeral: true})
                     return
@@ -350,12 +349,12 @@ client.on('interactionCreate', async (interaction) =>{
                                     return
                                 }
                                 interaction.reply(`Setting the \`Manager Role\` to \`${role.name}\``)
-                                await setConfigSetting("managerRole",role.id)
+                                setConfigSetting(interaction.guild,"managerRole",role.id)
                                 return
                             break;
                             case "generalRole":
                                 interaction.reply(`Setting the \`General Usage Role\` to \`${role.name}\``)
-                                await setConfigSetting("generalRole",role.id)
+                                setConfigSetting(interaction.guild,"generalRole",role.id)
                                 return
                             break;
                         }
@@ -366,7 +365,7 @@ client.on('interactionCreate', async (interaction) =>{
                         var stringValue = interaction.options.getString("config_value")
                         if(stringValue == null)
                         {
-                            const configData = await getConfigData()
+                            const configData = getConfigData(interaction.guild)
                             if(configData[stringOptionMessage] != null)
                             {
                                 interaction.reply(`The configuration for \`${stringOptionMessage}\` is currently set to \`${configData[stringOptionMessage]}\``)
@@ -379,12 +378,12 @@ client.on('interactionCreate', async (interaction) =>{
                         switch(stringOptionMessage)
                         {
                             case "dm_message":
-                                await setConfigSetting(stringOptionMessage,stringValue)
+                                setConfigSetting(interaction.guild,stringOptionMessage,stringValue)
                                 interaction.reply(`Setting the \`DM reply message\` to \`${stringValue}\``)
                                 return
                             break;
                             default:
-                                await setConfigSetting(stringOptionMessage,stringValue)
+                                setConfigSetting(interaction.guild,stringOptionMessage,stringValue)
                                 interaction.reply(`Setting the \`${stringOptionMessage}\` to \`${stringValue}\``)
                             break;
                         }
@@ -395,7 +394,7 @@ client.on('interactionCreate', async (interaction) =>{
                         var stringValue = interaction.options.getString("config_value")
                         if(stringValue == null)
                         {
-                            const configData = await getConfigData()
+                            const configData = getConfigData(interaction.guild)
                             if(configData[stringOptionMessage] != null)
                             {
                                 interaction.reply(`The configuration for \`${stringOptionMessage}\` is currently set to \`${configData[stringOptionMessage]}\``)
@@ -406,7 +405,7 @@ client.on('interactionCreate', async (interaction) =>{
                             return
                         }
 
-                        await setConfigSetting(stringOptionMessage,stringValue)
+                        setConfigSetting(interaction.guild, stringOptionMessage,stringValue)
                         interaction.reply(`Setting the \`${stringOptionMessage}\` to \`${stringValue}\``)
                     break;
 
@@ -417,7 +416,7 @@ client.on('interactionCreate', async (interaction) =>{
                             interaction.reply({content: `You need to type \`confirm\` to run this command.\nInsure you understand what you are doing before using this command.`, ephemeral: true})
                         }else
                         {
-                            await ClearConfig()
+                            ClearConfig(interaction.guild)
                             interaction.reply({content: `Clearing the config file`, ephemeral: false})
                         }
                         return
@@ -444,38 +443,43 @@ client.on('interactionCreate', async (interaction) =>{
 client.login(process.env.NEWTOKEN);
 
 
-function WriteKeyData(keydata)
+function WriteKeyData(guild, keydata)
 {
-    checkForFilesDir()
-    fs.writeFileSync(`src/files/keyData.txt`, JSON.stringify(keydata));
+    checkForFilesDir(guild)
+    fs.writeFileSync(`${FILESPATH}/${guild.id}/keyData.txt`, JSON.stringify(keydata));
 }
 
-function WriteUsedKeyData(keydata)
+function WriteUsedKeyData(guild,keydata)
 {
-    checkForFilesDir()
-    fs.writeFileSync(`src/files/usedKeyData.txt`, JSON.stringify(keydata));
+    checkForFilesDir(guild)
+    fs.writeFileSync(`${FILESPATH}/${guild.id}/usedKeyData.txt`, JSON.stringify(keydata));
 }
 
-function checkForFilesDir()
+function checkForFilesDir(guild)
 {
-    if(!fs.existsSync(`src/files`))
+    if(!fs.existsSync(`${FILESPATH}`))
     {
-        fs.mkdirSync(`src/files`)
+        fs.mkdirSync(`${FILESPATH}`)
+    }
+    if(!fs.existsSync(`${FILESPATH}/${guild.id}`))
+    {
+        fs.mkdirSync(`${FILESPATH}/${guild.id}`)
+        fs.writeFileSync(`${FILESPATH}/${guild.id}/${guild.name}.txt`,`Server name: ${guild.name}\nServer ID: ${guild.id}`)
     }
 }
 
-async function GetUsedKeyData()
+function GetUsedKeyData(guild)
 {
-    checkForFilesDir()
-    if(!fs.existsSync(`src/files/usedKeyData.txt`))
+    checkForFilesDir(guild)
+    if(!fs.existsSync(`${FILESPATH}/${guild.id}/usedKeyData.txt`))
         {
-            console.log("Couldnt find usedKeyData file. Creating new file.")
+            console.log(`Couldnt find usedKeyData file for guild ${guild.id}. Creating new file.`)
             var newKeyData = {}
             var JsonData = JSON.stringify(newKeyData)
-            fs.writeFileSync(`src/files/usedKeyData.txt`, JsonData);
+            fs.writeFileSync(`${FILESPATH}/${guild.id}/usedKeyData.txt`, JsonData);
             return newKeyData;
         }
-        const keyDataFile = await fs.readFileSync(`src/files/usedKeyData.txt`,'utf8')
+        const keyDataFile = fs.readFileSync(`${FILESPATH}/${guild.id}/usedKeyData.txt`,'utf8')
     
         if(keyDataFile === "") return ""
         const KeyData = JSON.parse(keyDataFile)
@@ -483,9 +487,9 @@ async function GetUsedKeyData()
         return KeyData
 }
 
-async function GetUsedKeysAsNiceString(client)
+async function GetUsedKeysAsNiceString(guild,client)
 {
-    const UsedKeyData = await GetUsedKeyData()
+    const UsedKeyData = GetUsedKeyData(guild)
     var niceString = ""
     if(Object.entries(UsedKeyData).length <= 0)
     {
@@ -500,9 +504,9 @@ async function GetUsedKeysAsNiceString(client)
     return niceString
 }
 
-async function GetKeysAsNiceString()
+function GetKeysAsNiceString(guild)
 {
-    const KeyData = await GetKeyData()
+    const KeyData = GetKeyData(guild)
     var newString = ""
     if(KeyData.unusedKeys.length <= 0)
     {
@@ -515,19 +519,19 @@ async function GetKeysAsNiceString()
     return newString
 }
 
-async function GetKeyData()
+function GetKeyData(guild)
 {
-    checkForFilesDir()
-    if(!fs.existsSync(`src/files/keyData.txt`))
+    checkForFilesDir(guild)
+    if(!fs.existsSync(`${FILESPATH}/${guild.id}/keyData.txt`))
     {
-        console.log("Couldnt find keyData file. Creating new file.")
+        console.log(`Couldnt find keyData for guild ${guild.id} file. Creating new file.`)
         var newKeyData = {}
         newKeyData.unusedKeys = []
         var JsonData = JSON.stringify(newKeyData)
-        fs.writeFileSync(`src/files/keyData.txt`, JsonData);
+        fs.writeFileSync(`${FILESPATH}/${guild.id}/keyData.txt`, JsonData);
         return newKeyData;
     }
-    const keyDataFile = await fs.readFileSync(`src/files/keyData.txt`,'utf8')
+    const keyDataFile = fs.readFileSync(`${FILESPATH}/${guild.id}/keyData.txt`,'utf8')
 
     if(keyDataFile === "") return ""
     const KeyData = JSON.parse(keyDataFile)
@@ -535,63 +539,63 @@ async function GetKeyData()
     return KeyData
 }
 
-async function ClearKeyList()
+function ClearKeyList(guild)
 {
-    const keyData = await GetKeyData()
+    const keyData = GetKeyData(guild)
     var newKeyData = keyData
     newKeyData.unusedKeys = []
-    WriteKeyData(newKeyData);
+    WriteKeyData(guild,newKeyData);
 }
 
-async function ClearUsedKeysList()
+function ClearUsedKeysList(guild)
 {
-    const usedKeyData = await GetUsedKeyData()
+    const usedKeyData = GetUsedKeyData(guild)
     var newKeyData = usedKeyData
     newKeyData = {}
-    WriteUsedKeyData(newKeyData)
+    WriteUsedKeyData(guild,newKeyData)
 }
 
-async function ClearConfig()
+function ClearConfig(guild)
 {
     const newConfig = {}
-    writeConfigData(newConfig)
+    writeConfigData(guild, newConfig)
 }
 
-async function AddKeysToKeyData(keys)
+function AddKeysToKeyData(guild,keys)
 {
-    const KeyData = await GetKeyData()
+    const KeyData = GetKeyData(guild)
     var newKeyData = KeyData
     var splitKeys = keys.split(",")
     for (let index = 0; index < splitKeys.length; index++) {
         newKeyData.unusedKeys.push(splitKeys[index])
     }
-    WriteKeyData(newKeyData)
+    WriteKeyData(guild,newKeyData)
 }
 
-async function AssignKeyToUser(key,user)
+function AssignKeyToUser(guild,key,user)
 {
-    const KeyData = await GetUsedKeyData()
+    const KeyData = GetUsedKeyData(guild)
     var newKeyData = KeyData
     
     var userAndKey = key
 
     newKeyData[user.id] = userAndKey
 
-    WriteUsedKeyData(newKeyData)
+    WriteUsedKeyData(guild,newKeyData)
 }
 
-async function SetKeyData(keys)
+function SetKeyData(guild,keys)
 {
-    const KeyData = await GetKeyData()
+    const KeyData = GetKeyData(guild)
     var newKeyData = KeyData
     newKeyData.unusedKeys = keys.unusedKeys
 
-    WriteKeyData(newKeyData)
+    WriteKeyData(guild,newKeyData)
 }
 
-async  function GetNextKeyAndRemove(user)
+function GetNextKeyAndRemove(guild,user)
 {
-    const KeyData = await GetKeyData()
+    const KeyData = GetKeyData(guild)
     if(KeyData.unusedKeys.length <= 0)
     {
         return null;
@@ -600,14 +604,14 @@ async  function GetNextKeyAndRemove(user)
     var newKeys
     newkeys = KeyData
     newkeys.unusedKeys = KeyData.unusedKeys.slice(1)
-    await AssignKeyToUser(nextKey,user)
-    await SetKeyData(newkeys)
+    AssignKeyToUser(guild,nextKey,user)
+    SetKeyData(guild,newkeys)
     return nextKey
 }
 
-async function CheckIfUserHasKey(user)
+function CheckIfUserHasKey(guild, user)
 {
-    const UsedKeys = await GetUsedKeyData()
+    const UsedKeys = GetUsedKeyData(guild)
     if(UsedKeys.hasOwnProperty(user.id))
     {
         return UsedKeys[user.id]
@@ -615,13 +619,13 @@ async function CheckIfUserHasKey(user)
     return null;
 }
 
-async function checkForManagerRole(member)
+function checkForManagerRole(guild,member)
 {
     if(member.guild.ownerId === member.id)
     {
         return true
     }
-    const managerRole = await getManagerRole()
+    const managerRole = getManagerRole(guild)
     if(managerRole == null)
     {
         console.log("There is no manager role set in the config.")
@@ -634,9 +638,9 @@ async function checkForManagerRole(member)
     return false
 }
 
-async function checkForGeneralRole(member)
+function checkForGeneralRole(guild,member)
 {
-    const generalRole = await getGeneralRole()
+    const generalRole = getGeneralRole(guild)
     if(generalRole == null)
     {
         console.log("There is no general role set in the config.")
@@ -649,9 +653,9 @@ async function checkForGeneralRole(member)
     return false
 }
 
-async function checkIfGeneralRoleExists()
+function checkIfGeneralRoleExists(guild)
 {
-    const generalRole = await getGeneralRole()
+    const generalRole = getGeneralRole(guild)
     if(generalRole == null)
     {
         return false
@@ -659,9 +663,9 @@ async function checkIfGeneralRoleExists()
     return true
 }
 
-async function getManagerRole()
+function getManagerRole(guild)
 {
-    const configData = await getConfigData()
+    const configData = getConfigData(guild)
     if(configData.managerRole == null)
     {
         return null
@@ -669,9 +673,9 @@ async function getManagerRole()
     return configData.managerRole
 }
 
-async function getGeneralRole()
+function getGeneralRole(guild)
 {
-    const configData = await getConfigData()
+    const configData = getConfigData(guild)
     if(configData.generalRole == null)
     {
         return null
@@ -679,38 +683,34 @@ async function getGeneralRole()
     return configData.generalRole
 }
 
-function getAdminRole()
+function setConfigSetting(guild, configOption, value)
 {
-    return getDefaultData().adminRole
-}
-
-async function setConfigSetting(configOption, value)
-{
-    const configData = await getConfigData()
+    const configData = getConfigData(guild)
     var newConfigData = configData
     newConfigData[configOption] = value
-    writeConfigData(newConfigData)
+    writeConfigData(guild, newConfigData)
 }
 
-async function getConfigData()
+function getConfigData(guild)
 {
-    if(!fs.existsSync(`src/files/config.txt`))
+    checkForFilesDir(guild)
+    if(!fs.existsSync(`${FILESPATH}/${guild.id}/config.txt`))
     {
-        console.log("Couldnt find config file. Adding new config file")
+        console.log(`Couldnt find config file for guild ${guild.id}. Adding new config file.`)
         const configData = {}
-        writeConfigData(configData)
+        writeConfigData(guild, configData)
         return configData;
     }
-    const configFile = await fs.readFileSync(`src/files/config.txt`,'utf8')
+    const configFile = fs.readFileSync(`${FILESPATH}/${guild.id}/config.txt`,'utf8')
 
     const configData = JSON.parse(configFile)
 
     return configData
 }
 
-async function getDMMessage(user,key)
+function getDMMessage(guild,user,key)
 {
-    const configData = await getConfigData()
+    const configData = getConfigData(guild)
     const userKeyWOSpace = key.replace(/\s/g, '')
     if(configData.dm_message == null)
     {
@@ -725,9 +725,9 @@ async function getDMMessage(user,key)
     return AdjustedMessage
 }
 
-async function GetKeyReply(user,key)
+function GetKeyReply(guild,user,key)
 {
-    const configData = await getConfigData()
+    const configData = getConfigData(guild)
     const userKeyWOSpace = key.replace(/\s/g, '')
     if(configData.getkey_reply == null)
     {
@@ -742,10 +742,10 @@ async function GetKeyReply(user,key)
     return AdjustedMessage
 }
 
-async function GetRemainingKeysMsg()
+function GetRemainingKeysMsg(guild)
 {
-    const configData = await getConfigData()
-    const KeyData = await GetKeyData()
+    const configData = getConfigData(guild)
+    const KeyData = GetKeyData(guild)
 
     var keyString = `**${KeyData.unusedKeys.length}** keys`
     if(KeyData.unusedKeys.length == 1)
@@ -763,9 +763,9 @@ async function GetRemainingKeysMsg()
     return AdjustedMessage
 }
 
-async function GetKeyReplyEphemeral()
+function GetKeyReplyEphemeral(guild)
 {
-    const configData = await getConfigData()
+    const configData = getConfigData(guild)
     if(configData.getkey_ephemeral == null)
     {
         return false
@@ -773,9 +773,9 @@ async function GetKeyReplyEphemeral()
     return configData.getkey_ephemeral
 }
 
-async function getLogChannel(guild)
+function getLogChannel(guild)
 {
-    const configData = await getConfigData()
+    const configData = getConfigData(guild)
     if(configData.logChannel == null)
     {
         console.log("no log channel set")
@@ -790,9 +790,9 @@ async function getLogChannel(guild)
     return channel
 }
 
-async function getUsersKey(user)
+function getUsersKey(guild, user)
 {
-    const usedKeyData = await GetUsedKeyData()
+    const usedKeyData = GetUsedKeyData(guild)
     if(usedKeyData[user.id] == null)
     {
         return null
@@ -800,9 +800,9 @@ async function getUsersKey(user)
     return usedKeyData[user.id]
 }
 
-async function removeKeyFromUsedKeys(user)
+function removeKeyFromUsedKeys(guild, user)
 {
-    const usedKeyData = await GetUsedKeyData()
+    const usedKeyData = GetUsedKeyData(guild)
     if(usedKeyData[user.id] == null)
     {
         console.log("Somehow the key was not in the used key list, this is not normally possible.")
@@ -810,13 +810,13 @@ async function removeKeyFromUsedKeys(user)
     }
     var newKeyData = usedKeyData
     delete usedKeyData[user.id]
-    WriteUsedKeyData(newKeyData)
+    WriteUsedKeyData(guild,newKeyData)
     return true
 }
 
-async function TryAndSendLogMessage(guild,message)
+function TryAndSendLogMessage(guild,message)
 {
-    const channel = await getLogChannel(guild)
+    const channel = getLogChannel(guild)
     if(channel == null)
     {
         return false
@@ -827,8 +827,8 @@ async function TryAndSendLogMessage(guild,message)
 
 }
 
-function writeConfigData(configData)
+function writeConfigData(guild,configData)
 {
-    checkForFilesDir()
-    fs.writeFileSync(`src/files/config.txt`,JSON.stringify(configData))
+    checkForFilesDir(guild)
+    fs.writeFileSync(`${FILESPATH}/${guild.id}/config.txt`,JSON.stringify(configData))
 }
