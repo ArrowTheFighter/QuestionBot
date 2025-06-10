@@ -105,11 +105,12 @@ client.on('interactionCreate', async (interaction) =>{
 
                 const reply = await interaction.fetchReply()
                 
-                const channel = await interaction.guild.channels.fetch(getQuestionsChannel(interaction.guild));
-                if(channel == null)
-                {
+                const channel_id = getQuestionsChannel(interaction.guild)
+                if (channel_id == null) {
                     return
                 }
+                const channel = await interaction.guild.channels.fetch(channel_id);
+                
 
                 const messag_content = `\`\`\`
 
