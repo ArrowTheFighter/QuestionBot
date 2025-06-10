@@ -20,7 +20,7 @@ client.on(Events.ClientReady, (x) => {
 
     console.log(`${x.user.tag} is ready`);
 
-    client.user.setActivity("Key Giveaway!");
+    client.user.setActivity("Looking for Questions");
 
     const question = new SlashCommandBuilder()
     .setName('question')
@@ -140,7 +140,6 @@ client.on('interactionCreate', async (interaction) =>{
                     components: [button_row]
                 })
 
-                console.log(`Sending question`)
                 
             break;
 
@@ -228,11 +227,14 @@ client.on('interactionCreate', async (interaction) =>{
                         const role = interaction.options.getRole("role")
                         
                         //TODO SET THIS TO CHECK FOR ADMIN PERMISSION
-                        if(interaction.member.id != interaction.guild.ownerId || !hasAdminPermission(interaction.member))
+                        if(!hasAdminPermission(interaction.member))
                         {
-                            interaction.reply({content: "Only the server admins can modify this setting.", ephemeral: true})
-                            return
+                            if (interaction.member.id != interaction.guild.ownerId) {
+                                interaction.reply({ content: "Only the server admins can modify this setting.", ephemeral: true })
+                                return
+                            }
                         }
+                        
                         
                         interaction.reply(`Setting the \`Moderator Role\` to \`${role.name}\``)
                         // TODO MAKE SURE THIS GETS UPDATED WHEN CHECKING FOR THE "moderatorRole" 
@@ -240,6 +242,13 @@ client.on('interactionCreate', async (interaction) =>{
                         return
                         
                     case "clear":
+
+                        if (!hasAdminPermission(interaction.member)) {
+                            if (interaction.member.id != interaction.guild.ownerId) {
+                                interaction.reply({ content: "Only the server admins can modify this setting.", ephemeral: true })
+                                return
+                            }
+                        }
                         var confirmString = interaction.options.getString("confirm")
                         if(confirmString != "confirm")
                         {
@@ -398,7 +407,7 @@ function getManagerRole(guild)
     {
         return null
     }
-    return configData.managerRole
+    return configData.moderatorRole
 }
 
 function getQuestionsChannel(guild)
