@@ -106,6 +106,10 @@ client.on('interactionCreate', async (interaction) =>{
                 const reply = await interaction.fetchReply()
                 
                 const channel = await interaction.guild.channels.fetch(getQuestionsChannel(interaction.guild));
+                if(channel == null)
+                {
+                    return
+                }
 
                 const messag_content = `\`\`\`
 
@@ -336,7 +340,6 @@ async function update_original_message(interaction, embed_text,embed_color)
 function yourCustomFunction(channel, member) {
     console.log(`${member.tag} selected channel: #${channel.name}`);
     setConfigSetting(member.guild,"questionsChannel",channel.id)
-    console.log(`channel id fetch = ${getQuestionsChannel(member.guild)}`)
 }
 
 function checkForFilesDir(guild)
