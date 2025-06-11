@@ -1,6 +1,6 @@
 require('dotenv').config();
 const fs = require('fs');
-const { Client, REST, Events, Partials, GatewayIntentBits, ChannelType, EmbedBuilder,StringSelectMenuBuilder, SlashCommandBuilder, PermissionFlagsBits ,PermissionsBitField, Permissions,ButtonBuilder, ButtonStyle, ActionRowBuilder, TextChannel} = require('discord.js');
+const { Client, REST, Events, Partials, GatewayIntentBits, ChannelType, AttachmentBuilder, EmbedBuilder,StringSelectMenuBuilder, SlashCommandBuilder, PermissionFlagsBits ,PermissionsBitField, Permissions,ButtonBuilder, ButtonStyle, ActionRowBuilder, TextChannel} = require('discord.js');
 const { Routes } = require('discord-api-types/v9');
 const { memoryUsage } = require('process');
 const internal = require('stream');
@@ -73,6 +73,12 @@ client.on(Events.ClientReady, (x) => {
         )
     )
     client.application.commands.create(config);
+
+    const download_questions = new SlashCommandBuilder()
+    .setName("download_questions")
+    .setDescription("Save and download unanswered questions to a text file.")
+
+    client.application.commands.create(download_questions);
     
 });
 
@@ -94,6 +100,13 @@ client.on('interactionCreate', async (interaction) =>{
                     interaction.reply({ content: "We are currently not accepting questions.", ephemeral: true })
                     return
                 }
+
+                const channel_id = getQuestionsChannel(interaction.guild)
+                if (channel_id == null) {
+                    interaction.reply({ content: "There was an error. Queue channel not setup, please contance support.", ephemeral: true })
+                    return
+                }
+
                 const optionContent = interaction.options.getString("content")
                 const main_embed = new EmbedBuilder()
                     .setTitle(`${interaction.user.tag} asked this question:`)
@@ -105,10 +118,7 @@ client.on('interactionCreate', async (interaction) =>{
 
                 const reply = await interaction.fetchReply()
                 
-                const channel_id = getQuestionsChannel(interaction.guild)
-                if (channel_id == null) {
-                    return
-                }
+                
                 const channel = await interaction.guild.channels.fetch(channel_id);
                 
 
@@ -140,6 +150,9 @@ client.on('interactionCreate', async (interaction) =>{
                     components: [button_row]
                 })
 
+                const questionSaveData = `${interaction.user.tag} Asks: ${optionContent}`
+                const questionID = reply.url.split("/")[reply.url.split("/").length - 2] + "/" + reply.url.split("/")[reply.url.split("/").length - 1]
+                addToQuestionsFile(interaction.guild, questionID,questionSaveData)
                 
             break;
 
@@ -171,6 +184,40 @@ client.on('interactionCreate', async (interaction) =>{
                 }
                 setConfigSetting(interaction.guild, "enabled", false)
                 interaction.reply({ content: `❌ The question bot is no longer accepting questions` })
+            break;
+
+            case "download_questions":
+                //Check if the message was sent in a server and not a DM
+                if (interaction.guild == null) {
+                    interaction.reply({ content: "This command cannot be used here. Please contact support if this is an error.", ephemeral: true })
+                    return
+                }
+                //Check if the member has the required role/permissions
+                if (!checkForManagerRole(interaction.member)) {
+                    interaction.reply({ content: "You do not have permission to use this command", ephemeral: true })
+                    return
+                }
+
+                if(Object.keys(getQuestionsData(interaction.guild)).length <= 0)
+                {
+                    interaction.reply({ content: "There are currently no questions logged", ephemeral: true })
+                    return
+                }
+
+                const deleteButton = new ButtonBuilder()
+                    .setCustomId('delete_questions')
+                    .setLabel('❌ Remove Questions From Memory')
+                    .setStyle(ButtonStyle.Danger);
+
+                const deleteButtonRow = new ActionRowBuilder().addComponents(deleteButton);
+
+                const attachment = GetQuestionListFile(interaction.guild,getQuestionsData(interaction.guild))
+                interaction.reply({
+                    content: `Questions list:`,
+                    files: [attachment],
+                    components: [deleteButtonRow]
+                })
+                return
             break;
                 
             case "set_channel":
@@ -205,7 +252,7 @@ client.on('interactionCreate', async (interaction) =>{
                 await interaction.reply({
                     embeds: [embed],
                     components: [row],
-                    ephemeral: false,
+                    ephemeral: true,
               });
 
             break;
@@ -304,6 +351,10 @@ client.on('interactionCreate', async (interaction) =>{
 
                 update_original_message(interaction, "Status/✅ Answered", "#30ff49")
 
+                const questionID = getQuestionIDFromMessageURL(interaction)
+                removeQuestionFromFile(interaction.guild, questionID)
+
+
             break;
             case 'mark_dismissed':
                 var message_embed = EmbedBuilder.from(interaction.message.embeds[0]);
@@ -314,9 +365,31 @@ client.on('interactionCreate', async (interaction) =>{
                     components: []
                 });
 
+                const questionID2 = getQuestionIDFromMessageURL(interaction)
+                removeQuestionFromFile(interaction.guild, questionID2)
+
                 /* Update original message here: */
 
                 //update_original_message(interaction, "Status/❌ Dismissed", "#e32822")
+            break;
+            case 'delete_questions':
+                //Check if the message was sent in a server and not a DM
+                if (interaction.guild == null) {
+                    interaction.reply({ content: "This command cannot be used here. Please contact support if this is an error.", ephemeral: true })
+                    return
+                }
+                //Check if the member has the required role/permissions
+                if (!checkForManagerRole(interaction.member)) {
+                    interaction.reply({ content: "You do not have permission to use this command", ephemeral: true })
+                    return
+                }
+                const emptyData = {}
+                writeQuestionData(interaction.guild,emptyData)
+                await interaction.update({
+                    components: []
+                });
+
+                interaction.channel.send({content: "Questions removed from memory"})
             break;
         }
     }
@@ -344,6 +417,38 @@ async function update_original_message(interaction, embed_text,embed_color)
     member_message_embed.setColor(embed_color)
 
     member_message.edit({ embeds: [member_message_embed] })
+}
+
+function getQuestionIDFromMessageURL(interaction)
+{
+    const message = interaction.message
+
+    const firstID = message.content.split("/")[5]
+    const secondID = message.content.split("/")[6]
+
+    const fullID = `${String(firstID)}/${secondID}`
+
+    return fullID
+}
+
+function GetQuestionListFile(guild, questionData)
+{
+    let output = '';
+    for (const key in questionData)
+        {
+            if(questionData.hasOwnProperty(key))
+                {
+                    output += `${questionData[key]}\n`
+                }
+        }
+
+    const filePath = (`${FILESPATH}/${guild.id}/questions_list.txt`)
+
+    fs.writeFileSync(filePath,output)
+
+    const attachment = new AttachmentBuilder(filePath)
+
+    return attachment
 }
 
 // Example function
@@ -427,6 +532,41 @@ function getEnabled(guild) {
         return false
     }
     return configData.enabled
+}
+
+function removeQuestionFromFile(guild,questionID)
+{
+    console.log(`Rmoving questions: ${questionID} ${typeof(questionID)}`)
+    var questionData = getQuestionsData(guild)
+    delete questionData[questionID]
+    writeQuestionData(guild, questionData)
+}
+
+function addToQuestionsFile(guild, questionsData,questionValue) {
+    const questionData = getQuestionsData(guild)
+    var newQuestionData = questionData
+    newQuestionData[questionsData] = questionValue
+    writeQuestionData(guild, newQuestionData)
+}
+
+function writeQuestionData(guild, questionsData) {
+    checkForFilesDir(guild)
+    fs.writeFileSync(`${FILESPATH}/${guild.id}/questions.txt`, JSON.stringify(questionsData))
+}
+
+function getQuestionsData(guild) {
+    checkForFilesDir(guild)
+    if (!fs.existsSync(`${FILESPATH}/${guild.id}/questions.txt`)) {
+        console.log(`Couldnt find questions file for guild ${guild.id}. Adding new questions file.`)
+        const questionsData = {}
+        writeQuestionData(guild, questionsData)
+        return questionsData;
+    }
+    const settingsFile = fs.readFileSync(`${FILESPATH}/${guild.id}/questions.txt`, 'utf8')
+
+    const questionData = JSON.parse(settingsFile)
+
+    return questionData
 }
 
 function setConfigSetting(guild, configOption, value)
