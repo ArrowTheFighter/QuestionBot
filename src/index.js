@@ -33,6 +33,17 @@ client.on(Events.ClientReady, (x) => {
     )
     client.application.commands.create(question);
 
+    const qstn = new SlashCommandBuilder()
+        .setName('qstn')
+        .setDescription('Submit a question.')
+        .addStringOption(option =>
+            option
+                .setName("content")
+                .setDescription("Enter you question here")
+                .setRequired(true)
+        )
+    client.application.commands.create(qstn);
+
     const set_channel = new SlashCommandBuilder()
     .setName("set_channel")
     .setDescription("Set the channel to send questions to.")
@@ -88,6 +99,7 @@ client.on('interactionCreate', async (interaction) =>{
         switch (interaction.commandName)
         {
             case "question":
+            case "qstn":
                 
                 //Check if the message was sent in a server and not a DM
                 if(interaction.guild == null)
@@ -109,7 +121,7 @@ client.on('interactionCreate', async (interaction) =>{
 
                 const optionContent = interaction.options.getString("content")
                 const main_embed = new EmbedBuilder()
-                    .setTitle(`${interaction.user.tag} asked this question:`)
+                    .setTitle(`${interaction.member.displayName} asked this question:`)
                     .setDescription(optionContent)
                     .addFields({name: `Status`, value: `🕘 In Queue`,inline: true})
                     .setColor('#ae41c4')
