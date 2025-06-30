@@ -5,3 +5,4 @@ node_modeules/
 .npmrc
 ecosystem.config.js
 start-bot.js
+node_modules/
